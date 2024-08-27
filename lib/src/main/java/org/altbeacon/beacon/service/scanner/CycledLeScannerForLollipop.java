@@ -339,7 +339,7 @@ public class CycledLeScannerForLollipop extends CycledLeScanner {
                 @Override
                 public void onScanResult(int callbackType, ScanResult scanResult) {
                     if (LogManager.isVerboseLoggingEnabled()) {
-                        LogManager.d(TAG, "got record");
+                        //LogManager.d(TAG, "got record");
                         List<ParcelUuid> uuids = scanResult.getScanRecord().getServiceUuids();
                         if (uuids != null) {
                             for (ParcelUuid uuid : uuids) {

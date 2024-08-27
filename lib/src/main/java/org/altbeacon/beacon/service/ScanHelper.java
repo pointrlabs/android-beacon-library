@@ -35,6 +35,7 @@ import org.altbeacon.beacon.startup.StartupBroadcastReceiver;
 import org.altbeacon.bluetooth.BluetoothCrashResolver;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -311,7 +312,6 @@ class ScanHelper {
             }
             mDistinctPacketDetector.clearDetections();
             mMonitoringStatus.updateNewlyOutside();
-            processRangeData();
         }
     };
 
@@ -319,14 +319,8 @@ class ScanHelper {
         return mCycledLeScanCallback;
     }
 
-    private void processRangeData() {
-        synchronized (mRangedRegionState) {
-            for (Region region : mRangedRegionState.keySet()) {
-                RangeState rangeState = mRangedRegionState.get(region);
-                LogManager.d(TAG, "Calling ranging callback");
-                rangeState.getCallback().call(mContext, "rangingData", new RangingData(rangeState.finalizeBeacons(), region).toBundle());
-            }
-        }
+    private void processRangeData(RangeState rangeState, Region region) {
+        rangeState.getCallback().call(mContext, "rangingData", new RangingData(rangeState.finalizeBeacons(), region).toBundle());
     }
 
     /**
@@ -361,6 +355,7 @@ class ScanHelper {
             List<Region> matchedRegions;
             Iterator<Region> matchedRegionIterator;
             LogManager.d(TAG, "looking for ranging region matches for this beacon");
+
             synchronized (mRangedRegionState) {
                 matchedRegions = matchingRegions(beacon, mRangedRegionState.keySet());
                 matchedRegionIterator = matchedRegions.iterator();
@@ -370,6 +365,7 @@ class ScanHelper {
                     RangeState rangeState = mRangedRegionState.get(region);
                     if (rangeState != null) {
                         rangeState.addBeacon(beacon);
+                        processRangeData(rangeState, region);
                     }
                 }
             }
