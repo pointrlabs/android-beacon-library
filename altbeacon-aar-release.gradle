@@ -1,0 +1,195 @@
+// credit https://raw.githubusercontent.com/blundell/release-android-library/master/android-release-aar.gradle
+// The flavour names 'product' and 'release' are hardcoded due to gradle script limitations. They should NOT be modified.
+// if they are modified, the release script here will NOT function. Please consult SDK team before modifying these flavour names.
+
+// For releasing ONLY regular sdk run :  ./gradlew releaseToArtifactory artifactoryPublish --> This will deploy only 1 SDK to artifactory : 'com.pointrlabs:pointr:versionName'
+// For releasing regular sdk along with recorder enabled sdk run : ./gradlew releaseToArtifactory artifactoryPublish -Precorder=true --> This will deploy 2 SDK's to artifactory : 'com.pointrlabs:pointr:versionName' and 'com.pointrlabs:pointr-recorder:versionName' (sdk with recorder capabilities)
+// For releasing ONLY the recorder SDK run : ./gradlew releaseToArtifactory artifactoryPublish -PrecorderOnly=true --> This will deploy only 1 SDK to artifactory : 'com.pointrlabs:pointr-recorder:versionName'
+
+apply plugin: 'com.jfrog.artifactory'
+apply plugin: 'maven-publish'
+apply plugin: 'org.jetbrains.dokka'
+
+def libraryGroupId = 'com.pointrlabs'
+def libraryArtifactId = 'pointr-altbeacon'
+def libraryVersion = android.defaultConfig.versionName
+
+tasks.named("dokkaHtml") {
+    if (project.hasProperty('dokkaOutputDirectory')) {
+        outputDirectory.set(file(project.properties['dokkaOutputDirectory']))
+    } else {
+        outputDirectory.set(file("$buildDir.path/javadoc"))
+    }
+
+    moduleName = project.name
+    dokkaSourceSets {
+        configureEach {
+            skipEmptyPackages.set(true)
+            skipDeprecated.set(true)
+            reportUndocumented.set(true)
+            jdkVersion.set(11)
+
+            for (String dokkaExclusion in getDokkaExclusions()) {
+                perPackageOption {
+                    matchingRegex.set("\\b${dokkaExclusion}\\S+")
+                    suppress.set(true)
+                }
+            }
+        }
+    }
+}
+
+android.libraryVariants.all { variant ->
+    def artifactName = variant.getFlavorName()
+
+    if (variant.buildType.name != "release") {
+        return
+    }
+
+    if (artifactName != "product") {
+        return
+    }
+
+    def apkName = "altBeaconLibrary"
+    apkName += "-" + artifactName
+    apkName += "-release.aar"
+    publishing {
+        publications {
+            println "Aar maven pub name = ${variant.name}"
+            "${variant.name}Aar"(MavenPublication) {
+                afterEvaluate {
+                    groupId libraryGroupId
+                    version libraryVersion
+                    artifactId libraryArtifactId
+                    artifact("$buildDir/outputs/aar/${apkName}")
+                    artifact tasks."${variant.name}JavadocJar"
+                }
+
+                pom.withXml {
+                    def dependencies = asNode().appendNode('dependencies')
+                    configurations.implementation.allDependencies.each {
+                        if (!it.group?.trim() || !it.name?.trim() || !it.version?.trim()) {
+                            return
+                        }
+                        def dependency = dependencies.appendNode('dependency')
+                        dependency.appendNode('groupId', it.group)
+                        dependency.appendNode('artifactId', it.name)
+                        dependency.appendNode('version', it.version)
+                        // for exclusions
+                        def excludeRules = it.properties.excludeRules
+                        if (excludeRules == null || it.properties.excludeRules.empty) {
+                            return
+                        }
+                        def exclusions = dependency.appendNode('exclusions')
+                        it.properties.excludeRules.each { ExcludeRule ex ->
+                            if (!ex.group?.trim() || !ex.module?.trim()) {
+                                return
+                            }
+                            def exclusion = exclusions.appendNode('exclusion')
+                            exclusion.appendNode('groupId', ex.group)
+                            exclusion.appendNode('artifactId', ex.module)
+                        }
+                    }
+                }
+            }
+
+        }
+    }
+
+    def flavorName = variant.getFlavorName().capitalize()
+    def publishTaskName = "publish${flavorName}"
+
+    task("${variant.name}Javadoc", type: Javadoc) {
+        group = 'artifact'
+        title = "Pointr AltBeacon API"
+        description "Generates Javadoc for $variant.name."
+        source = android.sourceSets.main.java.srcDirs
+        classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
+        failOnError false
+    }
+
+    task("${variant.name}JavadocJar", type: Jar, dependsOn: "${variant.name}Javadoc") {
+        getArchiveClassifier().set("javadoc")
+        from(tasks.named("dokkaJavadoc"))
+        dependsOn(tasks.named("dokkaJavadoc"))
+    }
+
+    task "${variant.name}SourcesJar"(type: Jar) {
+        getArchiveClassifier().set('sources')
+        destinationDirectory = new File("$project.buildDir/sources/$variant.name")
+        for (String exclusion in getExclusions()) {
+            exclude exclusion
+        }
+        from android.sourceSets.main.java.srcDirs
+    }
+
+
+    task(publishTaskName) {
+        dependsOn "assemble${variant.name.capitalize()}"
+        dependsOn("${variant.name}SourcesJar")
+        dependsOn("${variant.name}JavadocJar")
+        println "Here in ${publishTaskName} task. "
+        artifactoryPublish {
+            publications("${variant.name}Aar")
+        }
+    }
+
+}
+
+task("releaseToArtifactory") {
+    dependsOn('clean')
+    dependsOn('publishProduct')
+}
+
+
+
+tasks.withType(GenerateMavenPom).all {
+    def matcher = name =~ /generatePomFileFor(\w+)Publication/
+    def publicationName = matcher[0][1]
+    destination = "$buildDir/publications/${publicationName}/generated-pom.xml"
+}
+
+artifactory {
+    contextUrl = artifactory_url
+    publish {
+        repository {
+            repoKey = artifactory_repokey
+
+            username = artifactory_username
+            password = artifactory_password
+        }
+        defaults {
+            publishArtifacts = true
+            publishBuildInfo = false
+
+            properties = ['qa.level': 'basic', 'q.os': 'android', 'dev.team': 'core']
+            publishPom = true
+        }
+    }
+}
+
+private List<String> getDokkaExclusions() {
+    return getExclusions().collect { it.replaceAll("\\.java", "").replaceAll("/\\*\\*", "").replaceAll("/", ".")}
+}
+
+private List<String> getExclusions() {
+    def root = "com/pointrlabs/core/"
+
+    def exclusions = new ArrayList<String>()
+    exclusions.add("${root}bluetooth/**")
+    exclusions.add("${root}sensor/**")
+    exclusions.add("${root}crashlogging/**")
+    exclusions.add("${root}db/**")
+    exclusions.add("${root}receiver/**")
+    exclusions.add("${root}wall/models/**")
+    exclusions.add("${root}crashlogging/**")
+    exclusions.add("${root}nativecore/**")
+    exclusions.add("${root}positioning/internal/**")
+    exclusions.add("${root}management/internal/**")
+    exclusions.add("${root}util/internal/**")
+    exclusions.add("${root}map/widget/util/internal/**")
+    exclusions.add("${root}map/widget/selection/internal/**")
+    exclusions.add("${root}map/ui/internal/**")
+
+    return exclusions
+}
