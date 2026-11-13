@@ -41,3 +41,10 @@ settings (#1221). Pointr's changes, one commit each:
 - For Pointr only: `lib/build.gradle` fits core-android-sdk: compile SDK 37, min SDK 28, Java 11 and Kotlin 2.0 like
   `:PointrSDK`, AltBeacon's own dependencies, no Dokka or Maven Central publishing. AltBeacon's own tests are not
   built here: run them with AltBeacon's build, `./gradlew test` on a branch from `upstream/master`.
+- Sent to AltBeacon as #1257 (branch `android-17-scan-allowance`), on the branch `RD-1589-altbeacon-background-scanning`
+  here: Android 17's scan allowance
+  (`CycledLeScannerForLollipop`). The Pixel 9's Bluetooth stack gives an app 6 minutes of scanning an hour while it
+  is not on screen, so on Android 17 and later the foreground service scans off screen with a low power batch scan,
+  which costs 10% of that time and lasts the hour. It fetches the results every second, and isn't restarted every 4
+  minutes: batch scans get no scan timeout. It starts the scan again after a gap of more than 25 s, at most once a
+  minute, for a Bluetooth stack bug. Found with SimpleBeaconScanner.
