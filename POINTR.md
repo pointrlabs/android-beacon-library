@@ -48,3 +48,6 @@ settings (#1221). Pointr's changes, one commit each:
   which costs 10% of that time and lasts the hour. It fetches the results every second, and isn't restarted every 4
   minutes: batch scans get no scan timeout. It starts the scan again after a gap of more than 25 s, at most once a
   minute, for a Bluetooth stack bug. Found with SimpleBeaconScanner.
+  By default only phones with Google's Bluetooth module (`com.google.android.bluetooth`, Pixels) get the batch scan,
+  since Samsung phones with Android 17 have no allowance.
+  `BeaconManager.setAndroid17BatchScanEnabled(true/false)` turns it on or off for every Android 17 phone.
