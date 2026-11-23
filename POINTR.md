@@ -50,4 +50,4 @@ settings (#1221). Pointr's changes, one commit each:
   minute, for a Bluetooth stack bug. Found with SimpleBeaconScanner.
   By default only phones with Google's Bluetooth module (`com.google.android.bluetooth`, Pixels) get the batch scan,
   since Samsung phones with Android 17 have no allowance.
-  `BeaconManager.setAndroid17BatchScanEnabled(true/false)` turns it on or off for every Android 17 phone.
+  `Settings(android17BatchScanMode = ON/OFF)` turns it on or off for every Android 17 phone (AUTO is the default).
